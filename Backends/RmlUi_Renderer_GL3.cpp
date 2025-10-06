@@ -48,6 +48,9 @@
 #if defined RMLUI_PLATFORM_EMSCRIPTEN
 	#define RMLUI_SHADER_HEADER_VERSION "#version 300 es\nprecision highp float;\n"
 	#include <GLES3/gl3.h>
+#elif defined __ANDROID__
+	#define RMLUI_SHADER_HEADER_VERSION "#version 320 es\nprecision highp float;\n"
+	#include <GLES3/gl32.h>
 #elif defined RMLUI_GL3_CUSTOM_LOADER
 	#define RMLUI_SHADER_HEADER_VERSION "#version 330\n"
 	#include RMLUI_GL3_CUSTOM_LOADER
@@ -618,7 +621,7 @@ static bool CreateProgram(GLuint& out_program, Uniforms& inout_uniform_map, Prog
 static bool CreateFramebuffer(FramebufferData& out_fb, int width, int height, int samples, FramebufferAttachment attachment,
 	GLuint shared_depth_stencil_buffer)
 {
-#ifdef RMLUI_PLATFORM_EMSCRIPTEN
+#if defined(RMLUI_PLATFORM_EMSCRIPTEN) || defined(__ANDROID__)
 	constexpr GLint wrap_mode = GL_CLAMP_TO_EDGE;
 #else
 	constexpr GLint wrap_mode = GL_CLAMP_TO_BORDER; // GL_REPEAT GL_MIRRORED_REPEAT GL_CLAMP_TO_EDGE
@@ -651,7 +654,7 @@ static bool CreateFramebuffer(FramebufferData& out_fb, int width, int height, in
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, min_mag_filter);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, wrap_mode);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, wrap_mode);
-#ifndef RMLUI_PLATFORM_EMSCRIPTEN
+#if !defined(RMLUI_PLATFORM_EMSCRIPTEN) && !defined(__ANDROID__)
 		glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, &border_color[0]);
 #endif
 
@@ -894,7 +897,7 @@ void RenderInterface_GL3::BeginFrame()
 	glBlendEquation(GL_FUNC_ADD);
 	glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
-#ifndef RMLUI_PLATFORM_EMSCRIPTEN
+#if !defined(RMLUI_PLATFORM_EMSCRIPTEN) && !defined(__ANDROID__)
 	// We do blending in nonlinear sRGB space because that is the common practice and gives results that we are used to.
 	glDisable(GL_FRAMEBUFFER_SRGB);
 #endif
@@ -1152,40 +1155,37 @@ void RenderInterface_GL3::RenderToClipMask(Rml::ClipMaskOperation operation, Rml
 	RMLUI_ASSERT(glIsEnabled(GL_STENCIL_TEST));
 	using Rml::ClipMaskOperation;
 
-	const bool clear_stencil = (operation == ClipMaskOperation::Set || operation == ClipMaskOperation::SetInverse);
-	if (clear_stencil)
-	{
-		// @performance Increment the reference value instead of clearing each time.
-		glClear(GL_STENCIL_BUFFER_BIT);
-	}
-
-	GLint stencil_test_value = 0;
-	glGetIntegerv(GL_STENCIL_REF, &stencil_test_value);
-
-	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-	glStencilFunc(GL_ALWAYS, GLint(1), GLuint(-1));
-
+	GLint stencil_write_value = 1;
+	GLint stencil_test_value = 1;
 	switch (operation)
 	{
 	case ClipMaskOperation::Set:
 	{
+		// @performance Increment the reference value instead of clearing each time.
+		glClear(GL_STENCIL_BUFFER_BIT);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-		stencil_test_value = 1;
 	}
 	break;
 	case ClipMaskOperation::SetInverse:
 	{
+		glClearStencil(1);
+		glClear(GL_STENCIL_BUFFER_BIT);
+		glClearStencil(0);
 		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-		stencil_test_value = 0;
+		stencil_write_value = 0;
 	}
 	break;
 	case ClipMaskOperation::Intersect:
 	{
 		glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
+		glGetIntegerv(GL_STENCIL_REF, &stencil_test_value);
 		stencil_test_value += 1;
 	}
 	break;
 	}
+
+	glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+	glStencilFunc(GL_ALWAYS, stencil_write_value, GLuint(-1));
 
 	RenderGeometry(geometry, translation, {});
 
@@ -2179,9 +2179,12 @@ void RenderInterface_GL3::ResetProgram()
 
 bool RmlGL3::Initialize(Rml::String* out_message)
 {
-#if defined RMLUI_PLATFORM_EMSCRIPTEN
-	if (out_message)
-		*out_message = "Started Emscripten WebGL renderer.";
+#if defined(RMLUI_PLATFORM_EMSCRIPTEN)
+    if (out_message)
+        *out_message = "Started Emscripten WebGL renderer.";
+#elif defined(__ANDROID__)
+    if (out_message)
+        *out_message = "Started OpenGL ES 3 renderer.";
 #elif !defined RMLUI_GL3_CUSTOM_LOADER
 	const int gl_version = gladLoaderLoadGL();
 	if (gl_version == 0)
@@ -2200,7 +2203,7 @@ bool RmlGL3::Initialize(Rml::String* out_message)
 
 void RmlGL3::Shutdown()
 {
-#if !defined RMLUI_PLATFORM_EMSCRIPTEN && !defined RMLUI_GL3_CUSTOM_LOADER
+#if !defined(RMLUI_PLATFORM_EMSCRIPTEN) && !defined(__ANDROID__) && !defined(RMLUI_GL3_CUSTOM_LOADER)
 	gladLoaderUnloadGL();
 #endif
 }
