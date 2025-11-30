@@ -35,10 +35,11 @@
 
 namespace Rml {
 
+struct BoxShadowRenderable;
+
 class ElementBackgroundBorder {
 public:
 	ElementBackgroundBorder();
-
 	void Render(Element* element);
 
 	void DirtyBackground();
@@ -47,14 +48,16 @@ public:
 	Geometry* GetClipGeometry(Element* element, BoxArea clip_area);
 
 private:
-	enum class BackgroundType { BackgroundBorder, BoxShadow, ClipBorder, ClipPadding, ClipContent, Count };
+	enum class BackgroundType { BackgroundBorder, BoxShadowAndBackgroundBorder, ClipBorder, ClipPadding, ClipContent, Count };
 	struct Background {
 		Geometry geometry;
-		CallbackTexture texture;
+		Texture texture;
+		SharedPtr<BoxShadowRenderable> box_shadow_and_background_border;
 	};
 
 	Background* GetBackground(BackgroundType type);
 	Background& GetOrCreateBackground(BackgroundType type);
+	void EraseBackground(BackgroundType type);
 
 	void GenerateGeometry(Element* element);
 
