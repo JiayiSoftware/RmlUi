@@ -4,7 +4,7 @@
  * For the latest information, see http://github.com/mikke89/RmlUi
  *
  * Copyright (c) 2008-2010 CodePoint Ltd, Shift Technology Ltd
- * Copyright (c) 2019-2023 The RmlUi Team, and contributors
+ * Copyright (c) 2019-2025 The RmlUi Team, and contributors
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -26,22 +26,39 @@
  *
  */
 
-#ifndef RMLUI_CORE_TEXTSHAPINGCONTEXT_H
-#define RMLUI_CORE_TEXTSHAPINGCONTEXT_H
+#ifndef RMLUI_CORE_BOXSHADOWCACHE_H
+#define RMLUI_CORE_BOXSHADOWCACHE_H
 
-#include "StyleTypes.h"
-#include "Types.h"
+#include "../../Include/RmlUi/Core/CallbackTexture.h"
+#include "../../Include/RmlUi/Core/Geometry.h"
+#include "../../Include/RmlUi/Core/Types.h"
 
 namespace Rml {
+namespace Style {
+	class ComputedValues;
+}
+struct BoxShadowGeometryInfo;
 
-/*
-    Data extracted from the properties of an element to help provide context for text shaping and spacing.
-*/
-struct TextShapingContext {
-	const String& language;
-	Style::Direction text_direction = Style::Direction::Auto;
-	Style::FontKerning font_kerning = Style::FontKerning::Auto;
-	float letter_spacing = 0.0f; // Measured in pixels.
+struct BoxShadowRenderable : NonCopyMoveable {
+	BoxShadowRenderable(const BoxShadowGeometryInfo& geometry_info);
+	~BoxShadowRenderable();
+
+	CallbackTexture texture;
+	Geometry geometry;
+	Geometry background_border_geometry;
+	const BoxShadowGeometryInfo& cache_key;
+};
+
+class BoxShadowCache {
+public:
+	static void Initialize();
+	static void Shutdown();
+
+	/// Returns a handle to BoxShadow renderable matching the element's style - creates new data if none is found.
+	/// @param[in] element Element for which to calculate and cache the box shadow.
+	/// @param[in] computed The computed style values of the element.
+	/// @return A handle to the BoxShadow data, with automatic reference counting.
+	static SharedPtr<BoxShadowRenderable> GetHandle(Element* element, const Style::ComputedValues& computed);
 };
 
 } // namespace Rml
