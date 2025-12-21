@@ -64,20 +64,20 @@ public:
 	/// Get the element with the given id.
 	/// @param[in] root_element First element to check.
 	/// @param[in] id ID of the element to look for.
-	/// @param[in] include_non_dom_elements Wether to include non-dom elements in search.
+	/// @param[in] include_non_dom_elements Whether to include non-DOM elements in search.
 	static Element* GetElementById(Element* root_element, const String& id, bool include_non_dom_elements = false);
 	/// Get all elements with the given tag.
 	/// @param[out] elements Resulting elements.
 	/// @param[in] root_element First element to check.
 	/// @param[in] tag Tag to search for.
 	/// @param[in] stop_tag Optional, tag to stop searching at i.e. won't look for other elements within this tag.
-	/// @param[in] include_non_dom_elements Wether to include non-dom elements in search.
+	/// @param[in] include_non_dom_elements Whether to include non-DOM elements in search.
 	static void GetElementsByTagName(ElementList& elements, Element* root_element, const String& tag, const String& stop_tag = "", bool include_non_dom_elements = false);
 	/// Get all elements with the given class set on them.
 	/// @param[out] elements Resulting elements.
 	/// @param[in] root_element First element to check.
 	/// @param[in] class_name Class name to search for.
-	/// @param[in] include_non_dom_elements Wether to include non-dom elements in search.
+	/// @param[in] include_non_dom_elements Whether to include non-DOM elements in search.
 	static void GetElementsByClassName(ElementList& elements, Element* root_element, const String& class_name, bool include_non_dom_elements = false );
 
 	/// Returns an element's density-independent pixel ratio, defined by its context.
