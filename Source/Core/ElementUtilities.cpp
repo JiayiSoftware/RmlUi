@@ -49,7 +49,7 @@
 
 namespace Rml {
 
-Element* ElementUtilities::GetElementById(Element* root_element, const String& id, bool include_non_dom_elements = false)
+Element* ElementUtilities::GetElementById(Element* root_element, const String& id, bool include_non_dom_elements)
 {
 	// Breadth first search on elements for the corresponding id
 	typedef Queue<Element*> SearchQueue;
@@ -74,7 +74,7 @@ Element* ElementUtilities::GetElementById(Element* root_element, const String& i
 	return nullptr;
 }
 
-void ElementUtilities::GetElementsByTagName(ElementList& elements, Element* root_element, const String& tag, const String& stop_tag, bool include_non_dom_elements = false)
+void ElementUtilities::GetElementsByTagName(ElementList& elements, Element* root_element, const String& tag, const String& stop_tag, bool include_non_dom_elements)
 {
 	// Breadth first search on elements for the corresponding id
 	typedef Queue<Element*> SearchQueue;
@@ -99,7 +99,7 @@ void ElementUtilities::GetElementsByTagName(ElementList& elements, Element* root
 	}
 }
 
-void ElementUtilities::GetElementsByClassName(ElementList& elements, Element* root_element, const String& class_name, bool include_non_dom_elements = false)
+void ElementUtilities::GetElementsByClassName(ElementList& elements, Element* root_element, const String& class_name, bool include_non_dom_elements)
 {
 	// Breadth first search on elements for the corresponding id
 	typedef Queue<Element*> SearchQueue;
