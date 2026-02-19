@@ -42,12 +42,10 @@ bool InputTypeText::OnAttributeChange(const ElementAttributes& changed_attribute
 {
 	bool dirty_layout = false;
 
-	// Check if maxlength has been defined.
 	auto it = changed_attributes.find("maxlength");
 	if (it != changed_attributes.end())
 		widget->SetMaxLength(it->second.Get(-1));
 
-	// Check if size has been defined.
 	it = changed_attributes.find("size");
 	if (it != changed_attributes.end())
 	{
@@ -55,10 +53,13 @@ bool InputTypeText::OnAttributeChange(const ElementAttributes& changed_attribute
 		dirty_layout = true;
 	}
 
-	// Check if the value has been changed.
 	it = changed_attributes.find("value");
 	if (it != changed_attributes.end())
-		widget->SetValue(it->second.Get<String>());
+		widget->OnValueAttributeChanged(it->second.Get<String>());
+
+	it = changed_attributes.find("placeholder");
+	if (it != changed_attributes.end())
+		widget->OnPlaceholderAttributeChanged(it->second.Get<String>());
 
 	return !dirty_layout;
 }

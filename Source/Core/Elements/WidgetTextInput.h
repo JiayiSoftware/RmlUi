@@ -21,12 +21,20 @@ public:
 	WidgetTextInput(ElementFormControl* parent);
 	virtual ~WidgetTextInput();
 
-	/// Sets the value of the text field.
-	/// @param[in] value The new value to set on the text field.
-	/// @note The value will be sanitized and synchronized with the element's value attribute.
-	void SetValue(String value);
+	/// Handle changes to the parent element's value.
+	/// @param[in] value The new value set on the text field.
+	/// @note The attribute is considered the source of truth for the value.
+	/// @note The value will be sanitized and synchronized back to the element's value attribute.
+	void OnValueAttributeChanged(String value);
 	/// Returns the underlying text from the element's value attribute.
 	String GetAttributeValue() const;
+
+	/// Sets the placeholder text of the text field.
+	/// @param[in] placeholder The new placeholder text.
+	/// @note The attribute is considered the source of truth for the placeholder.
+	void OnPlaceholderAttributeChanged(const String& placeholder);
+	/// Returns the placeholder text of the text field.
+	String GetAttributePlaceholder() const;
 
 	/// Sets the maximum length (in characters) of this text field.
 	/// @param[in] max_length The new maximum length of the text field. A number lower than zero will mean infinite characters.
@@ -134,6 +142,8 @@ private:
 	/// Returns the displayed value of the text field.
 	/// @note For password fields this would only return the displayed asterisks '****', while the attribute value below contains the underlying text.
 	const String& GetValue() const;
+	/// Sets the text element either to the value or placeholder, and updates the placeholder pseudo class.
+	void SetValueOrPlaceholder(const String& value, const String& placeholder);
 
 	/// Moves the cursor along the current line.
 	/// @param[in] movement Cursor movement operation.
