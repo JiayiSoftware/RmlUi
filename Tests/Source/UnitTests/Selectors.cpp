@@ -511,3 +511,63 @@ TEST_CASE("Selectors")
 
 	TestsShell::ShutdownShell();
 }
+
+TEST_CASE("Selectors.placeholder")
+{
+	Context* context = TestsShell::GetContext();
+	const String document_rml = R"(
+<rml>
+<head>
+	<title>Demo</title>
+	<link type="text/rcss" href="/../Tests/Data/style.rcss" />
+	<style>
+		body {
+			width: 800px;
+			height: 800px;
+		}
+	</style>
+</head>
+<body>
+	<input id="A" type="text" placeholder="Some placeholder" />
+	<input id="B" type="text" placeholder="Some placeholder" value="I has value" />
+	<div id="C"/>
+	<div id="D"/>
+</body>
+</rml>
+)";
+
+	ElementDocument* document = context->LoadDocumentFromMemory(document_rml);
+	document->GetElementById("D")->SetPseudoClass("placeholder", true);
+	document->Show();
+
+	auto CheckSelector = [document](const String& selector, const String& expected_ids) {
+		ElementList elements;
+		document->QuerySelectorAll(elements, selector);
+		CHECK_MESSAGE(ElementListToIds(elements) == expected_ids, "Selector: ", selector);
+	};
+
+	CheckSelector("::placeholder", "A");
+	CheckSelector(":placeholder", "D");
+	CheckSelector("div:placeholder", "D");
+
+	CheckSelector("input::placeholder", "A");
+	CheckSelector("input.text::placeholder", "A");
+	CheckSelector("input[type=text]::placeholder", "A");
+	CheckSelector("input[type=password]::placeholder", "");
+	CheckSelector("input::other", "");
+
+	document->GetElementById("B")->SetAttribute("value", "");
+	TestsShell::RenderLoop();
+	CheckSelector("::placeholder", "A B");
+
+	document->GetElementById("A")->SetAttribute("placeholder", "");
+	TestsShell::RenderLoop();
+	CheckSelector("::placeholder", "B");
+
+	document->GetElementById("B")->SetAttribute("value", "Some value again");
+	TestsShell::RenderLoop();
+	CheckSelector("::placeholder", "");
+
+	context->UnloadDocument(document);
+	TestsShell::ShutdownShell();
+}
