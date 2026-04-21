@@ -348,7 +348,8 @@ void WidgetTextInput::SetSelectionRange(int selection_start, int selection_end)
 	}
 
 	UpdateCursorPosition(true);
-	ShowCursor(true, true);
+	MoveToCursor();
+	ShowCursor(true);
 
 	if (selection_changed)
 		FormatText();
@@ -558,7 +559,9 @@ void WidgetTextInput::ProcessEvent(Event& event)
 		case Input::KI_BACK:
 		{
 			CursorMovement direction = (ctrl ? CursorMovement::PreviousWord : CursorMovement::Left);
-			DeleteCharacters(direction);
+			if (DeleteCharacters(direction))
+				OnLayout();
+			MoveToCursor();
 			ShowCursor(true);
 		}
 		break;
@@ -567,7 +570,9 @@ void WidgetTextInput::ProcessEvent(Event& event)
 		case Input::KI_DELETE:
 		{
 			CursorMovement direction = (ctrl ? CursorMovement::NextWord : CursorMovement::Right);
-			DeleteCharacters(direction);
+			if (DeleteCharacters(direction))
+				OnLayout();
+			MoveToCursor();
 			ShowCursor(true);
 		}
 		break;
@@ -601,6 +606,8 @@ void WidgetTextInput::ProcessEvent(Event& event)
 				CopySelection();
 				DeleteSelection();
 				DispatchChangeEvent();
+				OnLayout();
+				MoveToCursor();
 				ShowCursor(true);
 			}
 		}
@@ -613,7 +620,9 @@ void WidgetTextInput::ProcessEvent(Event& event)
 				String clipboard_text;
 				GetSystemInterface()->GetClipboardText(clipboard_text);
 
-				AddCharacters(clipboard_text);
+				if (AddCharacters(clipboard_text))
+					OnLayout();
+				MoveToCursor();
 				ShowCursor(true);
 			}
 		}
@@ -638,9 +647,11 @@ void WidgetTextInput::ProcessEvent(Event& event)
 		if (event.GetParameter<int>("ctrl_key", 0) == 0 && event.GetParameter<int>("alt_key", 0) == 0 && event.GetParameter<int>("meta_key", 0) == 0)
 		{
 			String text = event.GetParameter("text", String{});
-			AddCharacters(text);
+			if (AddCharacters(text))
+				OnLayout();
 		}
 
+		MoveToCursor();
 		ShowCursor(true);
 		event.StopPropagation();
 	}
@@ -652,7 +663,7 @@ void WidgetTextInput::ProcessEvent(Event& event)
 			parent->SetPseudoClass("focus-visible", true);
 			if (UpdateSelection(false))
 				FormatText();
-			ShowCursor(true, false);
+			ShowCursor(true);
 
 			if (TextInputHandler* handler = GetTextInputHandler())
 			{
@@ -673,7 +684,7 @@ void WidgetTextInput::ProcessEvent(Event& event)
 				handler->OnDeactivate(text_input_context.get());
 			if (ClearSelection())
 				FormatText();
-			ShowCursor(false, false);
+			ShowCursor(false);
 		}
 	}
 	break;
@@ -703,8 +714,9 @@ void WidgetTextInput::ProcessEvent(Event& event)
 			if (UpdateSelection(event == EventId::Drag || event.GetParameter<int>("shift_key", 0) > 0))
 				FormatText();
 
-			const bool move_to_cursor = (event == EventId::Drag);
-			ShowCursor(true, move_to_cursor);
+			if (event == EventId::Drag)
+				MoveToCursor();
+			ShowCursor(true);
 			cancel_next_drag = false;
 		}
 	}
@@ -868,6 +880,7 @@ bool WidgetTextInput::MoveCursorHorizontal(CursorMovement movement, bool select,
 	UpdateCursorPosition(true);
 
 	bool selection_changed = UpdateSelection(select);
+	MoveToCursor();
 	ShowCursor(true);
 
 	return selection_changed;
@@ -902,6 +915,7 @@ bool WidgetTextInput::MoveCursorVertical(int distance, bool select, bool& out_of
 	UpdateCursorPosition(false);
 
 	bool selection_changed = UpdateSelection(select);
+	MoveToCursor();
 	ShowCursor(true);
 
 	return selection_changed;
@@ -992,7 +1006,7 @@ void WidgetTextInput::ExpandSelection()
 const String& WidgetTextInput::GetValue() const
 {
 	static const String empty_value;
-	if (parent->IsPseudoClassSet(":placeholder"))
+	if (parent->IsPseudoClassSet("placeholder-shown"))
 		return empty_value;
 
 	return text_element->GetText();
@@ -1007,7 +1021,7 @@ void WidgetTextInput::SetValueOrPlaceholder(const String& value, const String& p
 		UpdateSelection(false);
 	}
 
-	parent->SetPseudoClass(":placeholder", showing_placeholder);
+	parent->SetPseudoClass("placeholder-shown", showing_placeholder);
 	text_element->SetText(showing_placeholder ? placeholder : value);
 
 	ForceFormattingOnNextLayout();
@@ -1140,47 +1154,40 @@ int WidgetTextInput::CalculateCharacterIndex(int line_index, float position)
 	return prev_offset;
 }
 
-void WidgetTextInput::ShowCursor(bool show, bool move_to_cursor)
+void WidgetTextInput::ShowCursor(bool show)
 {
 	if (show)
 	{
 		cursor_visible = true;
 		cursor_timer = CURSOR_BLINK_TIME;
 		last_update_time = GetSystemInterface()->GetElapsedTime();
-
-		// Shift the cursor into view.
-		if (move_to_cursor)
-		{
-			float minimum_scroll_top = Math::Min((cursor_position.y + cursor_size.y) - GetAvailableHeight(), cursor_position.y);
-			if (parent->GetScrollTop() < minimum_scroll_top)
-				parent->SetScrollTop(minimum_scroll_top);
-			else if (parent->GetScrollTop() > cursor_position.y)
-				parent->SetScrollTop(cursor_position.y);
-
-			const bool word_wrap = parent->GetComputedValues().white_space() == Style::WhiteSpace::Prewrap;
-			float minimum_scroll_left = Math::Min((cursor_position.x + cursor_size.x) - GetAvailableWidth(), cursor_position.x);
-			if (word_wrap)
-				parent->SetScrollLeft(0.f);
-			else if (parent->GetScrollLeft() < minimum_scroll_left)
-				parent->SetScrollLeft(minimum_scroll_left);
-			else if (parent->GetScrollLeft() > cursor_position.x)
-				parent->SetScrollLeft(cursor_position.x);
-		}
-
-		SetKeyboardActive(true);
-		keyboard_showed = true;
 	}
 	else
 	{
 		cursor_visible = false;
 		cursor_timer = -1;
 		last_update_time = 0;
-		if (keyboard_showed)
-		{
-			SetKeyboardActive(false);
-			keyboard_showed = false;
-		}
 	}
+
+	SetKeyboardActive(show);
+}
+
+void WidgetTextInput::MoveToCursor()
+{
+	const float minimum_scroll_top = Math::Min((cursor_position.y + cursor_size.y) - GetAvailableHeight(), cursor_position.y);
+	if (parent->GetScrollTop() < minimum_scroll_top)
+		parent->SetScrollTop(minimum_scroll_top);
+	else if (parent->GetScrollTop() > cursor_position.y)
+		parent->SetScrollTop(cursor_position.y);
+
+	const bool word_wrap = parent->GetComputedValues().white_space() == Style::WhiteSpace::Prewrap;
+	float minimum_scroll_left = Math::Min((cursor_position.x + cursor_size.x) - GetAvailableWidth(), cursor_position.x);
+	if (word_wrap)
+		parent->SetScrollLeft(0.f);
+	else if (parent->GetScrollLeft() < minimum_scroll_left)
+		parent->SetScrollLeft(minimum_scroll_left);
+	else if (parent->GetScrollLeft() > cursor_position.x)
+		parent->SetScrollLeft(cursor_position.x);
 }
 
 void WidgetTextInput::FormatElement()
@@ -1465,7 +1472,7 @@ void WidgetTextInput::UpdateCursorPosition(bool update_ideal_cursor_position)
 	};
 
 	float alignment_offset;
-	if (parent->IsPseudoClassSet(":placeholder"))
+	if (parent->IsPseudoClassSet("placeholder-shown"))
 		alignment_offset = AlignmentOffsetForPlaceholder();
 	else
 		alignment_offset = GetAlignmentSpecificTextOffset(line);
@@ -1593,24 +1600,30 @@ void WidgetTextInput::GetLineIMEComposition(StringView& pre_composition, StringV
 
 void WidgetTextInput::SetKeyboardActive(bool active)
 {
-	if (SystemInterface* system = GetSystemInterface())
+	if (!keyboard_showed && !active)
+		return;
+
+	SystemInterface* system = GetSystemInterface();
+	if (!system)
+		return;
+
+	if (active)
 	{
-		if (active)
-		{
-			// Activate the keyboard and submit the cursor position and line height to enable clients to adjust the input method editor (IME).
-			const Vector2f element_offset = parent->GetAbsoluteOffset() - Vector2f{parent->GetScrollLeft(), parent->GetScrollTop()};
-			const Vector2f absolute_cursor_position = element_offset + cursor_position;
-			system->ActivateKeyboard(absolute_cursor_position, cursor_size.y);
-		}
-		else
-		{
-			system->DeactivateKeyboard();
-		}
+		// Activate the keyboard and submit the cursor position and line height to enable clients to adjust the input method editor (IME).
+		const Vector2f element_offset = parent->GetAbsoluteOffset() - Vector2f{parent->GetScrollLeft(), parent->GetScrollTop()};
+		const Vector2f absolute_cursor_position = element_offset + cursor_position;
+		system->ActivateKeyboard(absolute_cursor_position, cursor_size.y);
+	}
+	else
+	{
+		system->DeactivateKeyboard();
 	}
 }
 
 float WidgetTextInput::GetLineHeight() const
 {
+	// This is rounded to improve the navigation experience in a multi-line text field. If it's not rounded then lines
+	// may move a single pixel for every line, which looks a bit jaggedy when moving up and down.
 	return Math::Round(parent->GetLineHeight());
 }
 

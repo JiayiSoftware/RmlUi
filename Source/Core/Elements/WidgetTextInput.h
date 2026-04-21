@@ -71,6 +71,9 @@ public:
 	/// Force text formatting on the next layout update.
 	void ForceFormattingOnNextLayout();
 
+	/// Returns the used line height.
+	float GetLineHeight() const;
+	
 	/// Updates the cursor, if necessary.
 	void OnUpdate();
 	/// Renders the cursor, if it is visible.
@@ -180,8 +183,10 @@ private:
 
 	/// Shows or hides the cursor.
 	/// @param[in] show True to show the cursor, false to hide it.
-	/// @param[in] move_to_cursor True to force the cursor to be visible, false to not scroll the widget.
-	void ShowCursor(bool show, bool move_to_cursor = true);
+	void ShowCursor(bool show);
+
+	/// Scroll the view to make the cursor visible.
+	void MoveToCursor();
 
 	/// Formats the element, laying out the text and inserting scrollbars as appropriate.
 	void FormatElement();
@@ -226,8 +231,6 @@ private:
 	/// Returns the offset that aligns the contents of the line according to the 'text-align' property.
 	float GetAlignmentSpecificTextOffset(const Line& line) const;
 
-	/// Returns the used line height.
-	float GetLineHeight() const;
 	/// Returns the width available for the text contents without overflowing, that is, the content area subtracted by any scrollbar.
 	float GetAvailableWidth() const;
 	/// Returns the height available for the text contents without overflowing, that is, the content area subtracted by any scrollbar.

@@ -18,6 +18,101 @@
 
 namespace Rml {
 
+static bool IsEscapedCharacter(const String& string, size_t index)
+{
+	if (index == 0 || index > string.size())
+		return false;
+
+	size_t num_preceding_backslashes = 0;
+	for (size_t i = index; i > 0 && string[i - 1] == '\\'; --i)
+		num_preceding_backslashes += 1;
+
+	return (num_preceding_backslashes % 2) == 1;
+}
+
+static String UnescapeSelectorToken(StringView token)
+{
+	String result;
+	result.reserve(token.size());
+
+	for (const char* p = token.begin(); p != token.end(); ++p)
+	{
+		const char c = *p;
+		if (c == '\\' && (p + 1) != token.end())
+		{
+			result += *(p + 1);
+			++p;
+		}
+		else
+		{
+			result += c;
+		}
+	}
+
+	return result;
+}
+
+static String ExtractUnescapedSelectorToken(const String& string, size_t begin, size_t end)
+{
+	return UnescapeSelectorToken(StringView(string, begin, end - begin));
+}
+
+static size_t FindAttributeSelectorEnd(const String& rule, size_t start_index)
+{
+	char quote = 0;
+	for (size_t index = start_index + 1; index < rule.size(); index++)
+	{
+		const char c = rule[index];
+		if ((c == '\'' || c == '"') && !IsEscapedCharacter(rule, index))
+		{
+			if (!quote)
+				quote = c;
+			else if (quote == c)
+				quote = 0;
+		}
+		else if (c == ']' && !quote && !IsEscapedCharacter(rule, index))
+		{
+			return index;
+		}
+	}
+
+	return String::npos;
+}
+
+static size_t FindFirstUnescaped(const String& string, size_t begin, size_t end, StringView tokens)
+{
+	for (size_t index = begin; index < end; index++)
+	{
+		if (std::find(tokens.begin(), tokens.end(), string[index]) != tokens.end() && !IsEscapedCharacter(string, index))
+			return index;
+	}
+
+	return String::npos;
+}
+
+static void ParseAttributeSelector(AttributeSelector& attribute, const String& rule, size_t begin, size_t end)
+{
+	static const StringView attribute_operators = "=~|^$*";
+
+	const size_t i_operator = FindFirstUnescaped(rule, begin, end, attribute_operators);
+	const size_t i_name_end = Math::Min(i_operator, end);
+	attribute.name = UnescapeSelectorToken(StringUtilities::StripWhitespace(rule.substr(begin, i_name_end - begin)));
+
+	if (i_operator == String::npos)
+		return;
+
+	const char c = rule[i_operator];
+	attribute.type = AttributeSelectorType(c);
+
+	// Move cursor past operator. Non-'=' symbols are always followed by '=' so move two characters.
+	size_t i_value_begin = i_operator + (c == '=' ? 1 : 2);
+	String value = StringUtilities::StripWhitespace(rule.substr(i_value_begin, end - i_value_begin));
+	if (value.size() >= 2 && ((value.front() == '"' && value.back() == '"') || (value.front() == '\'' && value.back() == '\'')))
+		value = value.substr(1, value.size() - 2);
+
+	attribute.value = UnescapeSelectorToken(value);
+}
+
 class AbstractPropertyParser : NonCopyMoveable {
 protected:
 	~AbstractPropertyParser() = default;
@@ -544,7 +639,7 @@ bool StyleSheetParser::Parse(MediaBlockList& style_sheets, Stream* _stream, int 
 					// Add style nodes to the root of the tree
 					for (size_t i = 0; i < rule_name_list.size(); i++)
 					{
-						auto source = MakeShared<PropertySource>(stream_file_name, rule_line_number, rule_name_list[i]);
+						auto source = MakeShared<PropertySource>(stream_file_name, rule_line_number, UnescapeSelectorToken(rule_name_list[i]));
 						properties.SetSourceOfAllProperties(source);
 						if (!ImportProperties(current_block.stylesheet->root.get(), rule_name_list[i], properties, rule_count))
 						{
@@ -905,7 +1000,7 @@ StyleSheetNode* StyleSheetParser::ImportProperties(StyleSheetNode* node, const S
 
 			if (rule[start_index] == '[')
 			{
-				end_index = rule.find(']', start_index + 1);
+				end_index = FindAttributeSelectorEnd(rule, start_index);
 				if (end_index == String::npos)
 					return nullptr;
 				end_index += 1;
@@ -925,28 +1020,25 @@ StyleSheetNode* StyleSheetParser::ImportProperties(StyleSheetNode* node, const S
 				for (; end_index < rule.size(); end_index++)
 				{
 					static const String identifiers = "#.:[ >+~";
-					if (parenthesis_count == 0 && identifiers.find(rule[end_index]) != String::npos)
+					if (parenthesis_count == 0 && identifiers.find(rule[end_index]) != String::npos && !IsEscapedCharacter(rule, end_index))
 						break;
 
-					if (rule[end_index] == '(')
+					if (rule[end_index] == '(' && !IsEscapedCharacter(rule, end_index))
 						parenthesis_count += 1;
-					else if (rule[end_index] == ')')
+					else if (rule[end_index] == ')' && !IsEscapedCharacter(rule, end_index))
 						parenthesis_count -= 1;
 				}
 			}
 
 			if (end_index > start_index)
 			{
-				const char* p_begin = rule.data() + start_index;
-				const char* p_end = rule.data() + end_index;
-
 				switch (rule[start_index])
 				{
-				case '#': selector.id = String(p_begin + 1, p_end); break;
-				case '.': selector.class_names.push_back(String(p_begin + 1, p_end)); break;
+				case '#': selector.id = ExtractUnescapedSelectorToken(rule, start_index + 1, end_index); break;
+				case '.': selector.class_names.push_back(ExtractUnescapedSelectorToken(rule, start_index + 1, end_index)); break;
 				case ':':
 				{
-					String pseudo_class_name = String(p_begin + 1, p_end);
+					String pseudo_class_name = ExtractUnescapedSelectorToken(rule, start_index + 1, end_index);
 					StructuralSelector node_selector = StyleSheetFactory::GetSelector(pseudo_class_name);
 					if (node_selector.type != StructuralSelectorType::Invalid)
 						selector.structural_selectors.push_back(node_selector);
@@ -962,34 +1054,12 @@ StyleSheetNode* StyleSheetParser::ImportProperties(StyleSheetNode* node, const S
 						return nullptr;
 
 					AttributeSelector attribute;
-
-					static const String attribute_operators = "=~|^$*]";
-					size_t i_cursor = Math::Min(static_cast<size_t>(rule.find_first_of(attribute_operators, i_attr_begin)), i_attr_end);
-					attribute.name = rule.substr(i_attr_begin, i_cursor - i_attr_begin);
-
-					if (i_cursor < i_attr_end)
-					{
-						const char c = rule[i_cursor];
-						attribute.type = AttributeSelectorType(c);
-
-						// Move cursor past operator. Non-'=' symbols are always followed by '=' so move two characters.
-						i_cursor += (c == '=' ? 1 : 2);
-
-						size_t i_value_end = i_attr_end;
-						if (i_cursor < i_attr_end && (rule[i_cursor] == '"' || rule[i_cursor] == '\''))
-						{
-							i_cursor += 1;
-							i_value_end -= 1;
-						}
-
-						if (i_cursor < i_value_end)
-							attribute.value = rule.substr(i_cursor, i_value_end - i_cursor);
-					}
+					ParseAttributeSelector(attribute, rule, i_attr_begin, i_attr_end);
 
 					selector.attributes.push_back(std::move(attribute));
 				}
 				break;
-				default: selector.tag = String(p_begin, p_end); break;
+				default: selector.tag = ExtractUnescapedSelectorToken(rule, start_index, end_index); break;
 				}
 			}
 
@@ -1063,6 +1133,8 @@ bool StyleSheetParser::ReadCharacter(char& buffer)
 
 					if (parse_buffer[parse_buffer_pos] == '/')
 						comment = false;
+					else
+						parse_buffer_pos--;
 				}
 			}
 			else
