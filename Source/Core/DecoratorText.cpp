@@ -128,13 +128,17 @@ SharedPtr<Decorator> DecoratorTextInstancer::InstanceDecorator(const String& /*n
 	String text = StringUtilities::DecodeRml(p_text->Get<String>());
 	if (text.empty())
 		return nullptr;
+	
+	String new_text;
+	if (SystemInterface* system_interface = GetSystemInterface())
+		system_interface->TranslateString(new_text, text);
 
 	const bool inherit_color = (p_color->unit == Unit::KEYWORD);
 	const Colourb color = (p_color->unit == Unit::COLOUR ? p_color->Get<Colourb>() : Colourb{});
 	const Vector2Numeric align = ComputePosition(p_align);
 
 	auto decorator = MakeShared<DecoratorText>();
-	decorator->Initialise(std::move(text), inherit_color, color, align);
+	decorator->Initialise(std::move(new_text), inherit_color, color, align);
 	return decorator;
 }
 
